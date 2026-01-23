@@ -99,7 +99,7 @@ function loadWebpage() {
  * Elaborate items in the page
  */
 function addArray() {
-    const e2eLinks = "[data-e2e=user-liked-item], [data-e2e=music-item], [data-e2e=user-post-item], [data-e2e=favorites-item], [data-e2e=challenge-item], [data-e2e=search_top-item], [data-e2e=user-repost-item], [data-e2e=search_video-item]";
+    const e2eLinks = "[data-e2e=user-liked-item], [data-e2e=music-item], [data-e2e=user-post-item], [data-e2e=favorites-item], [data-e2e=challenge-item], [data-e2e=search_top-item], [data-e2e=user-repost-item], [data-e2e=search_video-item], [data-e2e=video-item], [data-e2e=collection-item]";
     let container = Array.from(document.querySelectorAll(e2eLinks)).map(item => item.parentElement); // Class of every video container
     if (window.location.href.indexOf("/photo/") !== -1 && scriptOptions.get_img_link) container = [document.createElement("div")]; // Let's put a div placeholder. For this reason, the script will check if the div has some child nodes, and, if not, to fetch metadata will use the entire document.
     for (let tikTokItem of container) {
