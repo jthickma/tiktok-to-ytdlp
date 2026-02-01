@@ -103,18 +103,21 @@ function addArray() {
     let container = Array.from(document.querySelectorAll(e2eLinks)).map(item => item.parentElement); // Class of every video container
     if (window.location.href.indexOf("/photo/") !== -1 && scriptOptions.get_img_link) container = [document.createElement("div")]; // Let's put a div placeholder. For this reason, the script will check if the div has some child nodes, and, if not, to fetch metadata will use the entire document.
     for (let tikTokItem of container) {
-        if (tikTokItem.getAttribute("data-e2e") === "search_video-item") tikTokItem = tikTokItem.parentElement;
-        if (!tikTokItem) continue; // Skip nullish results
-        let getLink = scriptOptions.advanced.get_link_by_filter ? Array.from(tikTokItem.querySelectorAll("a")).filter(e => e.href.indexOf("/video/") !== -1 || e.href.indexOf("/photo/") !== -1)[0]?.href : tikTokItem.querySelector(`[data-e2e=user-post-item-desc], ${e2eLinks}`)?.querySelector("a")?.href; // If the new filter method is selected, the script will look for the first link that contains a video link structure. Otherwise, the script'll look for data tags that contain the video URL.
-        if (window.location.href.indexOf("/photo/") !== -1 && scriptOptions.get_img_link) { // Get the image URLs
-            const images = new Set(Array.from(document.querySelectorAll(`[class*="--DivVideoContainer"] .swiper-slide > img[class*="--ImgPhotoSlide"], [class*="--DivPhotoPlayerContainer"] .swiper-slide > img[class*="--ImgPhotoSlide"]`)).map(i => i.src));
-            if (images.size > 0) {
-                getLink = scriptOptions.export_format === "json" ? Array.from(images) : Array.from(images).join("\n");
+        try {
+            if (tikTokItem?.getAttribute("data-e2e") === "search_video-item") tikTokItem = tikTokItem.parentElement;
+            if (!tikTokItem) continue; // Skip nullish results
+            let getLink = scriptOptions.advanced.get_link_by_filter ? Array.from(tikTokItem.querySelectorAll("a")).filter(e => e.href.indexOf("/video/") !== -1 || e.href.indexOf("/photo/") !== -1)[0]?.href : tikTokItem.querySelector(`[data-e2e=user-post-item-desc], ${e2eLinks}`)?.querySelector("a")?.href; // If the new filter method is selected, the script will look for the first link that contains a video link structure. Otherwise, the script'll look for data tags that contain the video URL.
+            if (window.location.href.indexOf("/photo/") !== -1 && scriptOptions.get_img_link) { // Get the image URLs
+                const images = new Set(Array.from(document.querySelectorAll(`[class*="--DivVideoContainer"] .swiper-slide > img[class*="--ImgPhotoSlide"], [class*="--DivPhotoPlayerContainer"] .swiper-slide > img[class*="--ImgPhotoSlide"]`)).map(i => i.src));
+                if (images.size > 0) {
+                    getLink = scriptOptions.export_format === "json" ? Array.from(images) : Array.from(images).join("\n");
+                }
             }
-        }
-        if (!scriptOptions.allow_images && getLink.indexOf("/photo/") !== -1) continue; // Avoid adding photo if the user doesn't want to.
-        if (scriptOptions.allow_images && scriptOptions.keep_only_images && getLink.indexOf("/photo/") === -1) continue; // Skip the link if the user wants to download only slideshows.
-        if (scriptOptions.advanced.check_nullish_link && (getLink ?? "") === "") { // If the script needs to check if the link is nullish, and it's nullish...
+            // Ensure getLink is a string before calling indexOf - fixes potential TypeError
+            const linkStr = typeof getLink === "string" ? getLink : "";
+            if (!scriptOptions.allow_images && linkStr.indexOf("/photo/") !== -1) continue; // Avoid adding photo if the user doesn't want to.
+            if (scriptOptions.allow_images && scriptOptions.keep_only_images && linkStr.indexOf("/photo/") === -1 && linkStr !== "") continue; // Skip the link if the user wants to download only slideshows.
+            if (scriptOptions.advanced.check_nullish_link && linkStr === "") { // If the script needs to check if the link is nullish, and it's nullish...
             if (scriptOptions.advanced.log_link_error) console.log("SCRIPT ERROR: Failed to get link!"); // If the user wants to print the error in the console, write it
             continue; // And, in general, continue with the next link.
         }
@@ -130,15 +133,33 @@ function addArray() {
                 shares: parseNumberForJson((tikTokItem.firstChild?.parentElement ?? document.body).querySelector(`[data-e2e="share-count"]`)?.textContent),
             })
         }
+        } catch (err) {
+            if (scriptOptions.advanced.log_link_error) console.log("SCRIPT ERROR: Failed to process item:", err);
+            continue;
+        }
     }
     /**
-     * Convert the "K", "M" in TikTok's number strings to number.
+     * Convert the "K", "M", "B" in TikTok's number strings to number.
+     * Handles formats like "1.5K" -> 1500, "2.3M" -> 2300000
      * @param {string} views the string to parse
-     * @returns the parsed string
+     * @returns the parsed number as string, or undefined if input is undefined
      */
     function parseNumberForJson(views) {
-        if (typeof views === "undefined") return;
-        return `${views.replace(".", "").replace("K", "00").replace("M", "00000")}${(views.indexOf("K") !== -1 || views.indexOf("M") !== -1) && views.indexOf(".") === -1 ? "0" : ""}`;
+        if (typeof views === "undefined" || views === null) return;
+        const str = String(views).trim();
+        if (str === "") return;
+        
+        // Match number with optional decimal and suffix (K, M, B)
+        const match = str.match(/^([\d.]+)\s*([KMB])?$/i);
+        if (!match) return str; // Return as-is if doesn't match expected format
+        
+        const num = parseFloat(match[1]);
+        const suffix = (match[2] || "").toUpperCase();
+        
+        const multipliers = { "K": 1000, "M": 1000000, "B": 1000000000 };
+        const result = suffix ? Math.round(num * multipliers[suffix]) : num;
+        
+        return String(result);
     }
     if (!scriptOptions.advanced.get_array_after_scroll && scriptOptions.advanced.delete_from_dom) { // Delete all the items from the DOM. Only the last 20 items will be kept.
         for (const item of Array.from(container).slice(0, container.length - 20)) item.remove();
