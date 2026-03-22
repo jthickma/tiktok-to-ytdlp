@@ -22,6 +22,8 @@
         scrolling_min_time: 1300,
         scrolling_max_time: 2100,
         min_views: -1,
+        min_date: null, // Only include videos uploaded on or after this date. Accepts "YYYY-MM-DD" or "MM-DD-YYYY". Set to null to disable.
+        max_date: null, // Only include videos uploaded on or before this date. Accepts "YYYY-MM-DD" or "MM-DD-YYYY". Set to null to disable.
         delete_from_next_txt: true,
         output_name_type: 2,
         adapt_text_output: true,
@@ -515,6 +517,20 @@
                             </div>
                             <input type="number" class="ttydlp-input" id="ttydlp-maxdownloads" value="0" min="0">
                         </div>
+                        <div class="ttydlp-option">
+                            <div>
+                                <div class="ttydlp-option-label">Min. Date</div>
+                                <div class="ttydlp-option-desc">Only posts on/after this date</div>
+                            </div>
+                            <input type="date" class="ttydlp-input" id="ttydlp-mindate">
+                        </div>
+                        <div class="ttydlp-option">
+                            <div>
+                                <div class="ttydlp-option-label">Max. Date</div>
+                                <div class="ttydlp-option-desc">Only posts on/before this date</div>
+                            </div>
+                            <input type="date" class="ttydlp-input" id="ttydlp-maxdate">
+                        </div>
                     </div>
                 </div>
                 
@@ -635,6 +651,11 @@
         const maxDl = getValue('ttydlp-maxdownloads', 0);
         scriptOptions.advanced.maximum_downloads = maxDl === 0 ? Infinity : maxDl;
 
+        const minDateVal = getValue('ttydlp-mindate', '');
+        scriptOptions.min_date = minDateVal !== '' ? minDateVal : null;
+        const maxDateVal = getValue('ttydlp-maxdate', '');
+        scriptOptions.max_date = maxDateVal !== '' ? maxDateVal : null;
+
         saveSettings();
     }
 
@@ -647,6 +668,8 @@
                 allow_images: scriptOptions.allow_images,
                 keep_only_images: scriptOptions.keep_only_images,
                 min_views: scriptOptions.min_views,
+                min_date: scriptOptions.min_date,
+                max_date: scriptOptions.max_date,
                 scrolling_min_time: scriptOptions.scrolling_min_time,
                 scrolling_max_time: scriptOptions.scrolling_max_time,
                 delete_from_dom: scriptOptions.advanced.delete_from_dom,
@@ -681,6 +704,8 @@
                     setVal('ttydlp-deletedom', settings.delete_from_dom);
                     setVal('ttydlp-afterscroll', settings.get_array_after_scroll);
                     setVal('ttydlp-maxdownloads', settings.maximum_downloads === Infinity ? 0 : settings.maximum_downloads);
+                    setVal('ttydlp-mindate', settings.min_date ?? '');
+                    setVal('ttydlp-maxdate', settings.max_date ?? '');
 
                     syncSettingsFromUI();
                 }
@@ -839,13 +864,47 @@
         return obj;
     }
 
+    /**
+     * Extracts the video ID from a TikTok URL and calculates the upload date
+     * using the 64-bit snowflake ID bitshift approach.
+     * @param {string} url The TikTok video URL
+     * @returns {Date|null} The upload date of the video, or null if not applicable
+     */
+    function getUploadDateFromUrl(url) {
+        const videoIdMatch = url.match(/\/video\/(\d+)/);
+        if (videoIdMatch === null) { return null; } // Not a standard video URL (e.g. photo slider)
+        const videoId = videoIdMatch[1];
+        // TikTok video IDs are 64-bit snowflakes. Right shifting by 32 bits gives UNIX timestamp in seconds.
+        const unixTimestamp = Number(BigInt(videoId) >> 32n) * 1000;
+        return new Date(unixTimestamp);
+    }
+
+    /**
+     * Normalizes a Date to midnight (start of day) for calendar-day comparisons.
+     * @param {Date} date
+     * @returns {Date}
+     */
+    function normalizeToDay(date) {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
     function generateOutput() {
         addArray();
         updateCount();
         
         let output = scriptOptions.export_format === "json" ? [] : "";
+        const parsedMinDate = scriptOptions.min_date ? normalizeToDay(new Date(scriptOptions.min_date)) : null;
+        const parsedMaxDate = scriptOptions.max_date ? normalizeToDay(new Date(scriptOptions.max_date)) : null;
         for (const [url, obj] of Array.from(containerMap)) {
             if (+obj.views < scriptOptions.min_views) continue;
+            if (parsedMinDate || parsedMaxDate) {
+                const uploadDate = getUploadDateFromUrl(url);
+                if (uploadDate) {
+                    const uploadDay = normalizeToDay(uploadDate);
+                    if (parsedMinDate && uploadDay < parsedMinDate) continue;
+                    if (parsedMaxDate && uploadDay > parsedMaxDate) continue;
+                }
+            }
             scriptOptions.export_format === "json" 
                 ? output.push(deleteUnrequestedContent({ ...obj, url })) 
                 : output += `${url}\n`;

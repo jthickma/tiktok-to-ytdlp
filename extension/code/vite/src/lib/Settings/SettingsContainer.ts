@@ -4,6 +4,8 @@ let Settings = writable({
     scrolling_min_time: 1300, // Change the mininum time the script will try to refresh the page
     scrolling_max_time: 2100, // Change the maxinum time the script will try to refresh the page
     min_views: -1, // If a video has fewer views than this, it won't be included in the script.
+    min_date: null, // Only include videos uploaded on or after this date. Accepts "YYYY-MM-DD" or "MM-DD-YYYY". Set to null to disable.
+    max_date: null, // Only include videos uploaded on or before this date. Accepts "YYYY-MM-DD" or "MM-DD-YYYY". Set to null to disable.
     delete_from_next_txt: true, // Delete all the items put in the previous .txt file when asking for a new one. Useful only if you want to obtain a .txt file while scrolling.
     output_name_type: 2, // Put a string to specify a specific name of the file. Put 0 for trying to fetching it using data tags, 1 for fetching it from the window title, 2 for fetching it from the first "h1" element. _Invalid_ inputs will use the standard "TikTokLinks.txt". This will be edited if a different value is passed from the startDownload() function.
     adapt_text_output: true, // Replace characters that are prohibited on Windows
