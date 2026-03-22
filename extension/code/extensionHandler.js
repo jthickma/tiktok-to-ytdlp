@@ -11,7 +11,9 @@ function updateClient() {
             const avoidNullishValues = new Map([ // If those values are null (Svelte might save them as null if nothing is provided), sign them as default
                 ["scrolling_min_time", 1300],
                 ["scrolling_max_time", 2100],
-                ["min_views", -1]
+                ["min_views", -1],
+                ["date_after", null],
+                ["date_before", null]
             ]);
             for (let [key, value] of avoidNullishValues) if (scriptOptions[key] === null) scriptOptions[key] = value;
             if (scriptOptions.advanced.maximum_downloads === null) scriptOptions.advanced.maximum_downloads = Infinity;

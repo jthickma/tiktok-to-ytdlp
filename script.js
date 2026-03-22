@@ -11,6 +11,8 @@ var scriptOptions = {
     export_format: "txt", // Put "json" to save everything as a JSON file.
     exclude_from_json: [], // If you plan to export the content in a JSON file, here you can exclude some properties from the JSON output. You can exclude "url", "views", "caption".
     get_img_link: true, // In case a TikTok slideshow is open, fetch the image URLs instead of the video URL.
+    date_after: null, // Only include posts on or after this date. ISO date string "YYYY-MM-DD" or null for no limit.
+    date_before: null, // Only include posts on or before this date. ISO date string "YYYY-MM-DD" or null for no limit.
     advanced: {
         get_array_after_scroll: false, // Gets the item links after the webpage is fully scrolled, and not after every scroll.
         get_link_by_filter: true, // Get the website link by inspecting all the links in the container div, instead of looking for data references.
@@ -117,6 +119,13 @@ function addArray() {
             const linkStr = typeof getLink === "string" ? getLink : "";
             if (!scriptOptions.allow_images && linkStr.indexOf("/photo/") !== -1) continue; // Avoid adding photo if the user doesn't want to.
             if (scriptOptions.allow_images && scriptOptions.keep_only_images && linkStr.indexOf("/photo/") === -1 && linkStr !== "") continue; // Skip the link if the user wants to download only slideshows.
+            if (scriptOptions.date_after || scriptOptions.date_before) { // Filter by post date decoded from the Snowflake ID in the URL
+                const postDate = extractDateFromUrl(linkStr);
+                if (postDate) {
+                    if (scriptOptions.date_after && postDate < new Date(scriptOptions.date_after)) continue;
+                    if (scriptOptions.date_before && postDate > new Date(scriptOptions.date_before)) continue;
+                }
+            }
             if (scriptOptions.advanced.check_nullish_link && linkStr === "") { // If the script needs to check if the link is nullish, and it's nullish...
             if (scriptOptions.advanced.log_link_error) console.log("SCRIPT ERROR: Failed to get link!"); // If the user wants to print the error in the console, write it
             continue; // And, in general, continue with the next link.
@@ -136,6 +145,22 @@ function addArray() {
         } catch (err) {
             if (scriptOptions.advanced.log_link_error) console.log("SCRIPT ERROR: Failed to process item:", err);
             continue;
+        }
+    }
+    /**
+     * Extract the upload date from a TikTok video/photo URL by decoding the Snowflake ID.
+     * TikTok IDs are 64-bit integers where the top 32 bits encode the Unix timestamp in seconds.
+     * @param {string} url the TikTok video or photo URL
+     * @returns {Date|null} the post date, or null if it cannot be determined
+     */
+    function extractDateFromUrl(url) {
+        const match = typeof url === "string" && url.match(/\/(video|photo)\/(\d+)/);
+        if (!match) return null;
+        try {
+            const timestamp = Number(BigInt(match[2]) >> 32n);
+            return new Date(timestamp * 1000);
+        } catch (e) {
+            return null;
         }
     }
     /**

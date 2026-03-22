@@ -12,6 +12,8 @@ let Settings = writable({
     export_format: "txt",
     exclude_from_json: [], // If you plan to export the content in a JSON file, here you can exclude some properties from the JSON output. You can exclude "url", "views", "caption".
     get_img_link: true, // In case a TikTok slideshow is open, fetch the image URLs instead of the video URL.
+    date_after: null, // Only include posts on or after this date. ISO date string "YYYY-MM-DD" or null for no limit.
+    date_before: null, // Only include posts on or before this date. ISO date string "YYYY-MM-DD" or null for no limit.
     advanced: {
         get_array_after_scroll: false, // Gets the item links after the webpage is fully scrolled, and not after every scroll.
         get_link_by_filter: true, // Get the website link by inspecting all the links in the container div, instead of looking for data references.

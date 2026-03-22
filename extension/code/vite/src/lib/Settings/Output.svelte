@@ -14,6 +14,14 @@
                 <input type="number" bind:value={$Settings.min_views} /> views
             </label><br />
             <label class="flex hcenter autoGap">
+                Posts after:
+                <input type="date" bind:value={$Settings.date_after} />
+            </label><br />
+            <label class="flex hcenter autoGap">
+                Posts before:
+                <input type="date" bind:value={$Settings.date_before} />
+            </label><br />
+            <label class="flex hcenter autoGap">
                 <input type="checkbox" bind:checked={$Settings.allow_images} /> Download
                 also images
             </label>

@@ -30,6 +30,8 @@
         export_format: "txt",
         exclude_from_json: [],
         get_img_link: true,
+        date_after: null,
+        date_before: null,
         advanced: {
             get_array_after_scroll: false,
             get_link_by_filter: true,
@@ -515,6 +517,20 @@
                             </div>
                             <input type="number" class="ttydlp-input" id="ttydlp-maxdownloads" value="0" min="0">
                         </div>
+                        <div class="ttydlp-option">
+                            <div>
+                                <div class="ttydlp-option-label">Posts After</div>
+                                <div class="ttydlp-option-desc">Only include posts on/after date</div>
+                            </div>
+                            <input type="date" class="ttydlp-input" id="ttydlp-date-after" style="width: auto;">
+                        </div>
+                        <div class="ttydlp-option">
+                            <div>
+                                <div class="ttydlp-option-label">Posts Before</div>
+                                <div class="ttydlp-option-desc">Only include posts on/before date</div>
+                            </div>
+                            <input type="date" class="ttydlp-input" id="ttydlp-date-before" style="width: auto;">
+                        </div>
                     </div>
                 </div>
                 
@@ -635,6 +651,11 @@
         const maxDl = getValue('ttydlp-maxdownloads', 0);
         scriptOptions.advanced.maximum_downloads = maxDl === 0 ? Infinity : maxDl;
 
+        const dateAfterEl = document.getElementById('ttydlp-date-after');
+        scriptOptions.date_after = dateAfterEl?.value || null;
+        const dateBeforeEl = document.getElementById('ttydlp-date-before');
+        scriptOptions.date_before = dateBeforeEl?.value || null;
+
         saveSettings();
     }
 
@@ -651,7 +672,9 @@
                 scrolling_max_time: scriptOptions.scrolling_max_time,
                 delete_from_dom: scriptOptions.advanced.delete_from_dom,
                 get_array_after_scroll: scriptOptions.advanced.get_array_after_scroll,
-                maximum_downloads: scriptOptions.advanced.maximum_downloads
+                maximum_downloads: scriptOptions.advanced.maximum_downloads,
+                date_after: scriptOptions.date_after,
+                date_before: scriptOptions.date_before
             }));
         }
     }
@@ -681,6 +704,8 @@
                     setVal('ttydlp-deletedom', settings.delete_from_dom);
                     setVal('ttydlp-afterscroll', settings.get_array_after_scroll);
                     setVal('ttydlp-maxdownloads', settings.maximum_downloads === Infinity ? 0 : settings.maximum_downloads);
+                    setVal('ttydlp-date-after', settings.date_after ?? '');
+                    setVal('ttydlp-date-before', settings.date_before ?? '');
 
                     syncSettingsFromUI();
                 }
@@ -776,7 +801,14 @@
                 const linkStr = typeof getLink === "string" ? getLink : "";
                 if (!scriptOptions.allow_images && linkStr.indexOf("/photo/") !== -1) continue;
                 if (scriptOptions.allow_images && scriptOptions.keep_only_images && linkStr.indexOf("/photo/") === -1 && linkStr !== "") continue;
-                
+                if (scriptOptions.date_after || scriptOptions.date_before) {
+                    const postDate = extractDateFromUrl(linkStr);
+                    if (postDate) {
+                        if (scriptOptions.date_after && postDate < new Date(scriptOptions.date_after)) continue;
+                        if (scriptOptions.date_before && postDate > new Date(scriptOptions.date_before)) continue;
+                    }
+                }
+
                 if (scriptOptions.advanced.check_nullish_link && linkStr === "") {
                     if (scriptOptions.advanced.log_link_error) console.log("TikTok to yt-dlp: Failed to get link!");
                     continue;
@@ -807,6 +839,17 @@
 
         if (!scriptOptions.advanced.get_array_after_scroll && scriptOptions.advanced.delete_from_dom) {
             for (const item of Array.from(container).slice(0, container.length - 20)) item.remove();
+        }
+    }
+
+    function extractDateFromUrl(url) {
+        const match = typeof url === "string" && url.match(/\/(video|photo)\/(\d+)/);
+        if (!match) return null;
+        try {
+            const timestamp = Number(BigInt(match[2]) >> 32n);
+            return new Date(timestamp * 1000);
+        } catch (e) {
+            return null;
         }
     }
 
