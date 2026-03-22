@@ -3,6 +3,8 @@ var scriptOptions = {
     scrolling_min_time: 1300, // Change the mininum time the script will try to refresh the page
     scrolling_max_time: 2100, // Change the maxinum time the script will try to refresh the page
     min_views: -1, // If a video has fewer views than this, it won't be included in the script.
+    min_date: null, // Only include videos uploaded on or after this date. Accepts "YYYY-MM-DD" or "MM-DD-YYYY". Set to null to disable.
+    max_date: null, // Only include videos uploaded on or before this date. Accepts "YYYY-MM-DD" or "MM-DD-YYYY". Set to null to disable.
     delete_from_next_txt: true, // Delete all the items put in the previous .txt file when asking for a new one. Useful only if you want to obtain a .txt file while scrolling.
     output_name_type: 2, // Put a string to specify a specific name of the file. Put 0 for trying to fetching it using data tags, 1 for fetching it from the window title, 2 for fetching it from the first "h1" element. _Invalid_ inputs will use the standard "TikTokLinks.txt". This will be edited if a different value is passed from the startDownload() function.
     adapt_text_output: true, // Replace characters that are prohibited on Windows
@@ -184,6 +186,28 @@ function deleteUnrequestedContent(obj) {
     return obj;
 }
 /**
+ * Extracts the video ID from a TikTok URL and calculates the upload date
+ * using the 64-bit snowflake ID bitshift approach.
+ * @param {string} url The TikTok video URL
+ * @returns {Date|null} The upload date of the video, or null if not applicable
+ */
+function getUploadDateFromUrl(url) {
+    const videoIdMatch = url.match(/\/video\/(\d+)/);
+    if (videoIdMatch === null) { return null; } // Not a standard video URL (e.g. photo slider)
+    const videoId = videoIdMatch[1];
+    // TikTok video IDs are 64-bit snowflakes. Right shifting by 32 bits gives UNIX timestamp in seconds.
+    const unixTimestamp = Number(BigInt(videoId) >> 32n) * 1000;
+    return new Date(unixTimestamp);
+}
+/**
+ * Normalizes a Date to midnight (start of day) for calendar-day comparisons.
+ * @param {Date} date
+ * @returns {Date}
+ */
+function normalizeToDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+/**
  * Generate the output file
  * @returns if running on Node, a string array or an Object. If running on the console, undefined.
  */
@@ -191,8 +215,18 @@ function ytDlpScript() {
     addArray(); // Add the last elements in the DOM, or all the elements if get_array_after_scroll is set to true.
     // Create the txt file with all of the TikTok links.
     let ytDlpScript = scriptOptions.export_format === "json" ? [] : "";
+    const parsedMinDate = scriptOptions.min_date ? normalizeToDay(new Date(scriptOptions.min_date)) : null;
+    const parsedMaxDate = scriptOptions.max_date ? normalizeToDay(new Date(scriptOptions.max_date)) : null;
     for (const [url, obj] of Array.from(containerMap)) {
         if (+obj.views < scriptOptions.min_views) continue;
+        if (parsedMinDate || parsedMaxDate) {
+            const uploadDate = getUploadDateFromUrl(url);
+            if (uploadDate) {
+                const uploadDay = normalizeToDay(uploadDate);
+                if (parsedMinDate && uploadDay < parsedMinDate) continue;
+                if (parsedMaxDate && uploadDay > parsedMaxDate) continue;
+            }
+        }
         scriptOptions.export_format === "json" ? ytDlpScript.push(deleteUnrequestedContent({ ...obj, url })) : ytDlpScript += `${url}\n`;
     }
     if (scriptOptions.node.isNode && !scriptOptions.node.isResolveTime) return getWhatToReturn(ytDlpScript); else downloadScript(typeof ytDlpScript === "object" ? JSON.stringify(ytDlpScript) : ytDlpScript); // If the user has requested from Node to get the array, get it
