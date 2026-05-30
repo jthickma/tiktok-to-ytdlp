@@ -10,7 +10,7 @@ let Settings = writable({
     allow_images: true, // Save also TikTok Image URLs
     keep_only_images: false, // Save only TikTok Image URLs
     export_format: "txt",
-    exclude_from_json: [], // If you plan to export the content in a JSON file, here you can exclude some properties from the JSON output. You can exclude "url", "views", "caption".
+    exclude_from_json: [] as string[], // If you plan to export the content in a JSON file, here you can exclude some properties from the JSON output. You can exclude "url", "views", "caption".
     get_img_link: true, // In case a TikTok slideshow is open, fetch the image URLs instead of the video URL.
     date_after: null, // Only include posts on or after this date. ISO date string "YYYY-MM-DD" or null for no limit.
     date_before: null, // Only include posts on or before this date. ISO date string "YYYY-MM-DD" or null for no limit.

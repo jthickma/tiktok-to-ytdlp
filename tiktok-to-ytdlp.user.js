@@ -6,11 +6,12 @@
 // @author       dinoosauro
 // @match        https://www.tiktok.com/*
 // @match        https://tiktok.com/*
+// @match        https://*.tiktok.com/*
 // @icon         https://www.tiktok.com/favicon.ico
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @run-at       document-idle
+// @run-at       document-start
 // @license      MIT
 // ==/UserScript==
 
@@ -48,12 +49,39 @@
     };
 
     // ==================== STATE ====================
-    let height = document.body.scrollHeight;
+    let height = getScrollHeight();
     let containerMap = new Map([]);
     let skipLinks = [];
     let isRunning = false;
     let shouldStop = false;
-    let itemCount = 0;
+    let stylesInjected = false;
+    let uiObserver = null;
+    let routeWatchInstalled = false;
+
+    function getScrollHeight() {
+        return document.body?.scrollHeight ?? document.documentElement?.scrollHeight ?? 0;
+    }
+
+    function isTikTokPage() {
+        return /(^|\.)tiktok\.com$/i.test(window.location.hostname);
+    }
+
+    function getUIElements() {
+        return {
+            overlay: document.getElementById('ttydlp-overlay'),
+            fab: document.getElementById('ttydlp-fab'),
+            panel: document.getElementById('ttydlp-panel')
+        };
+    }
+
+    function hasCompleteUI() {
+        const { overlay, fab, panel } = getUIElements();
+        return Boolean(overlay && fab && panel);
+    }
+
+    function removePartialUI() {
+        Object.values(getUIElements()).forEach(el => el?.remove());
+    }
 
     // ==================== STYLES ====================
     const styles = `
@@ -389,13 +417,20 @@
 
     // ==================== UI CREATION ====================
     function createUI() {
+        if (!isTikTokPage() || !document.body) return false;
+        if (hasCompleteUI()) return true;
+        removePartialUI();
+
         // Add styles
-        if (typeof GM_addStyle !== 'undefined') {
+        if (!stylesInjected && typeof GM_addStyle !== 'undefined') {
             GM_addStyle(styles);
-        } else {
+            stylesInjected = true;
+        } else if (!stylesInjected && !document.getElementById('ttydlp-style')) {
             const styleEl = document.createElement('style');
+            styleEl.id = 'ttydlp-style';
             styleEl.textContent = styles;
-            document.head.appendChild(styleEl);
+            (document.head ?? document.documentElement).appendChild(styleEl);
+            stylesInjected = true;
         }
 
         // Create overlay
@@ -599,6 +634,42 @@
 
         // Load saved settings
         loadSettings();
+        return true;
+    }
+
+    function ensureUI() {
+        const didCreate = createUI();
+        if (didCreate && document.body && !uiObserver) {
+            uiObserver = new MutationObserver(() => {
+                if (!hasCompleteUI()) {
+                    setTimeout(createUI, 50);
+                }
+            });
+            uiObserver.observe(document.body, { childList: true });
+        }
+        return didCreate;
+    }
+
+    function installRouteWatch() {
+        if (routeWatchInstalled) return;
+        routeWatchInstalled = true;
+
+        const rerender = () => setTimeout(ensureUI, 50);
+        const wrapHistoryMethod = (method) => {
+            const original = history[method];
+            history[method] = function (...args) {
+                const result = original.apply(this, args);
+                rerender();
+                return result;
+            };
+        };
+
+        wrapHistoryMethod('pushState');
+        wrapHistoryMethod('replaceState');
+        window.addEventListener('popstate', rerender);
+        window.addEventListener('pageshow', rerender);
+        document.addEventListener('visibilitychange', rerender);
+        setInterval(ensureUI, 2000);
     }
 
     function togglePanel() {
@@ -737,12 +808,12 @@
 
         if (!document.querySelector('[class$="--DivLoadingContainer"]')) {
             !scriptOptions.advanced.get_array_after_scroll && scriptOptions.advanced.delete_from_dom && 
-                window.scrollTo({ top: document.body.scrollHeight - (window.outerHeight * (window.devicePixelRatio || 1)), behavior: 'smooth' });
+                window.scrollTo({ top: getScrollHeight() - (window.outerHeight * (window.devicePixelRatio || 1)), behavior: 'smooth' });
             
             setTimeout(() => {
-                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                window.scrollTo({ top: getScrollHeight(), behavior: 'smooth' });
                 setTimeout(() => {
-                    if (height !== document.body.scrollHeight) {
+                    if (height !== getScrollHeight()) {
                         if (!scriptOptions.advanced.get_array_after_scroll) {
                             addArray();
                             updateCount();
@@ -753,12 +824,12 @@
                             }
                         }
                         setTimeout(() => {
-                            height = document.body.scrollHeight;
+                            height = getScrollHeight();
                             loadWebpage();
                         }, Math.floor(Math.random() * scriptOptions.scrolling_max_time + scriptOptions.scrolling_min_time));
                     } else {
                         setTimeout(() => {
-                            if (!document.querySelector('[class$="--DivLoadingContainer"]') && height == document.body.scrollHeight) {
+                            if (!document.querySelector('[class$="--DivLoadingContainer"]') && height == getScrollHeight()) {
                                 downloadFile();
                             } else {
                                 loadWebpage();
@@ -939,7 +1010,7 @@
     function startDownload() {
         containerMap = new Map([]);
         skipLinks = [];
-        height = document.body.scrollHeight;
+        height = getScrollHeight();
         shouldStop = false;
         setRunningState(true);
         updateCount();
@@ -979,12 +1050,17 @@
 
     // ==================== INIT ====================
     function init() {
-        // Wait for page to be ready
+        installRouteWatch();
+        if (ensureUI()) return;
+
+        const retryUntilReady = () => {
+            if (!ensureUI()) setTimeout(retryUntilReady, 50);
+        };
+
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', createUI);
-        } else {
-            createUI();
+            document.addEventListener('DOMContentLoaded', retryUntilReady, { once: true });
         }
+        retryUntilReady();
     }
 
     init();

@@ -24,7 +24,8 @@
   let isFirstEvent = true;
   let isAuthorizedForTikTok = true;
   const newBrowser: typeof chrome =
-    typeof chrome === "undefined" ? browser : chrome; // For older Firefox versions
+    typeof chrome === "undefined" ? (globalThis as any).browser : chrome; // For older Firefox versions
+  const tiktokOrigins = ["*://*.tiktok.com/*", "*://tiktok.com/*"];
   Settings.subscribe((settingUpdate) => {
     if (isFirstEvent) {
       isFirstEvent = false;
@@ -37,7 +38,7 @@
    */
   async function checkPermission() {
     isAuthorizedForTikTok = await newBrowser.permissions.contains({
-      origins: ["*://*.tiktok.com/*"],
+      origins: tiktokOrigins,
     });
   }
   onMount(() => {
@@ -56,11 +57,9 @@
       return update;
     }
     checkPermission();
-    newBrowser.storage.sync
-      .get("settings")
-      .then(
-        (obj) => ($Settings = UpdateJsonProperties(obj.settings, $Settings)),
-      );
+    newBrowser.storage.sync.get("settings").then((obj) => {
+      if (obj.settings) $Settings = UpdateJsonProperties(obj.settings, $Settings);
+    });
 
     newBrowser.runtime.onMessage.addListener(
       (msg) => (isConverting = msg.operation), // Currently, messages from the content_script are sent only when the value of the operation changes
@@ -70,6 +69,24 @@
   interface MessageProps {
     action: string;
     content: any;
+  }
+  function isTikTokUrl(url?: string) {
+    return /^https?:\/\/([^/]+\.)?tiktok\.com\//i.test(url ?? "");
+  }
+  async function getActiveTikTokTab() {
+    const tabs = await newBrowser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    return tabs.find((tab) => tab.id !== undefined && isTikTokUrl(tab.url));
+  }
+  async function injectContentScript(tabId: number) {
+    if (!newBrowser.scripting?.executeScript) return false;
+    await newBrowser.scripting.executeScript({
+      target: { tabId },
+      files: ["extensionHandler.js"],
+    });
+    return true;
   }
   /**
    * This function will replace some values that are stored in the extension settings in a different way.
@@ -88,8 +105,24 @@
    * @param msg the message to send
    */
   async function sendMessage(msg: MessageProps) {
-    const ids = await newBrowser.tabs.query({ active: true });
-    newBrowser.tabs.sendMessage(ids[0].id as number, msg);
+    const tab = await getActiveTikTokTab();
+    if (tab?.id === undefined) return;
+
+    try {
+      await newBrowser.tabs.sendMessage(tab.id, msg);
+    } catch (err) {
+      try {
+        if (await injectContentScript(tab.id)) {
+          await newBrowser.tabs.sendMessage(tab.id, msg);
+        }
+      } catch (injectionErr) {
+        console.warn(
+          "tiktok-to-ytdlp could not inject into the active TikTok tab",
+          injectionErr,
+          err,
+        );
+      }
+    }
   }
 </script>
 
@@ -110,7 +143,7 @@
     <button
       on:click={async () => {
         await newBrowser.permissions.request({
-          origins: ["*://*.tiktok.com/*"],
+          origins: tiktokOrigins,
         });
         checkPermission();
       }}>Grant authorization</button
