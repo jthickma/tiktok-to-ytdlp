@@ -11,7 +11,7 @@
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @run-at       document-start
+// @run-at       document-idle
 // @license      MIT
 // ==/UserScript==
 
@@ -57,6 +57,7 @@
     let stylesInjected = false;
     let uiObserver = null;
     let routeWatchInstalled = false;
+    let lastUrl = window.location.href;
 
     function getScrollHeight() {
         return document.body?.scrollHeight ?? document.documentElement?.scrollHeight ?? 0;
@@ -655,20 +656,16 @@
         routeWatchInstalled = true;
 
         const rerender = () => setTimeout(ensureUI, 50);
-        const wrapHistoryMethod = (method) => {
-            const original = history[method];
-            history[method] = function (...args) {
-                const result = original.apply(this, args);
-                rerender();
-                return result;
-            };
+        const checkRoute = () => {
+            if (lastUrl === window.location.href) return;
+            lastUrl = window.location.href;
+            rerender();
         };
 
-        wrapHistoryMethod('pushState');
-        wrapHistoryMethod('replaceState');
         window.addEventListener('popstate', rerender);
         window.addEventListener('pageshow', rerender);
         document.addEventListener('visibilitychange', rerender);
+        setInterval(checkRoute, 500);
         setInterval(ensureUI, 2000);
     }
 
